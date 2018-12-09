@@ -2,7 +2,7 @@ import sqlite3
 from collections import namedtuple
 from datetime import datetime
 
-import dateutil.parser
+from dateutil import parser
 import praw
 import requests
 from praw.models import Comment
@@ -43,7 +43,7 @@ def update_format(update):
 
 # Format a datetime to english
 def date_datetime(dt):
-    return dt.strftime("%d %b %Y %H:%M %Z").strip()
+    return dt.strftime("%d %b %Y %H:%M UTC%z").strip()
 
 
 # Format a unix timestamp to english
@@ -53,7 +53,7 @@ def date_unix(unix):
 
 # Format a ISO 8601 date to english
 def date_iso(iso):
-    return date_datetime(dateutil.parser.parse(iso))
+    return date_datetime(parser.parse(iso))
 
 
 # Handle an updated incident
@@ -204,7 +204,7 @@ def incident_check():
         # Is a new incident?
         if incident["id"] not in known_incidents and not incident["resolved_at"]:
             new_incident(incident)
-            break
+            continue
 
         # Is an updated incident?
         if incident["id"] in known_incidents and incident["updated_at"] != known_incidents[incident["id"]]:
