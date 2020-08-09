@@ -2,7 +2,7 @@
 
 On {date} a new incident, "{incident.name}", was posted to the Discord status page.
 
-The incident can be seen in full at https://status.discordapp.com/incidents/{incident.id}
+The incident can be seen in full at https://status.discord.com/incidents/{incident.id}
 
 {incident_summary}
 

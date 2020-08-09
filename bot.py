@@ -198,7 +198,7 @@ def incident_check():
         known_incidents[row[0]] = row[1]
 
     # Fetch incidents from API
-    r = requests.get("https://status.discordapp.com/api/v2/incidents.json")
+    r = requests.get("https://status.discord.com/api/v2/incidents.json")
     r = r.json()
     for incident in r["incidents"]:
         # Is a new incident?

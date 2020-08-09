@@ -10,8 +10,8 @@
 
 <!-- Badges -->
 <p align="center">
-    <a href="https://status.discordapp.com/" target="_blank">
-        <img src="https://img.shields.io/badge/discord-Status-blue.svg?style=flat-square" alt="status.discordapp.com">
+    <a href="https://status.discord.com/" target="_blank">
+        <img src="https://img.shields.io/badge/discord-Status-blue.svg?style=flat-square" alt="status.discord.com">
     </a>
     <a href="https://www.reddit.com/r/discordstatus" target="_blank">
         <img src="https://img.shields.io/badge/reddit-r%2Fdiscordstatus-blue.svg?style=flat-square" alt="r/discordstatus">
