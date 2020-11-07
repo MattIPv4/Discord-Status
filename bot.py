@@ -2,6 +2,7 @@ import sqlite3
 from collections import namedtuple
 from datetime import datetime
 from time import sleep
+from base64 import b64encode
 
 from dateutil import parser
 import praw
@@ -13,8 +14,10 @@ from conf import *
 # Global
 target_subreddits = ["discordstatus"]
 target_channels = ["774652047026290688"]
-post_to_reddit = False
+post_to_reddit = True
 post_to_discord = True
+update_reddit_icon = False
+update_discord_icon = True
 
 # Connect to db
 conn = sqlite3.connect("bot.db")
@@ -25,6 +28,7 @@ c.execute("CREATE TABLE IF NOT EXISTS incidents (status_id text, last_update tex
 c.execute("CREATE TABLE IF NOT EXISTS posts (status_id text, reddit_id text)")
 c.execute("CREATE TABLE IF NOT EXISTS updates (status_id text, update_id text)")
 c.execute("CREATE TABLE IF NOT EXISTS messages (status_id text, discord_id text)")
+c.execute("CREATE TABLE IF NOT EXISTS data (key_id text, value text)")
 
 
 # Connect to reddit
@@ -42,7 +46,7 @@ def reddit():
 def discord_message(content, channel_id):
     r = requests.post(
         "https://discord.com/api/channels/{}/messages".format(channel_id),
-        data={
+        json={
             "content": content
         },
         headers={
@@ -250,6 +254,66 @@ def mod_update(reply, incident_id):
         pass
 
 
+# Look for current status
+def status_check():
+    # Fetch known status from db
+    last_status = None
+    for row in c.execute("SELECT `value` FROM `data` WHERE `key_id` = 'status'"):
+        last_status = row[0]
+
+    # Fetch incidents from API
+    r = requests.get("https://status.discord.com/api/v2/status.json")
+    r = r.json()
+
+    # Don't do anything if same
+    if r['status']['indicator'] == last_status:
+        return
+
+    # Update the subreddit icon
+    if update_reddit_icon:
+        rd = reddit()
+        for subreddit in target_subreddits:
+            try:
+                subr = rd.subreddit(subreddit)
+                subr.stylesheet.upload_mobile_icon("icons/" + r['status']['indicator'] + ".png")
+                rd.post(
+                    path="/r/" + subreddit + "/api/upload_sr_img",
+                    data={"upload_type": "icon"},
+                    files={"file": open("icons/" + r['status']['indicator'] + ".png", "rb")}
+                )
+            except Exception as e:
+                print(e)
+                continue
+
+    # Update the Discord icon
+    if update_discord_icon:
+        try:
+            with open("icons/" + r['status']['indicator'] + ".png", "rb") as file:
+                b64 = b64encode(file.read())
+            resp = requests.patch(
+                "https://discord.com/api/users/@me",
+                json={
+                    "avatar": "data:image/png;base64,{}".format(b64.decode('utf-8'))
+                },
+                headers={
+                    "Authorization": "Bot {}".format(DISCORD_TOKEN)
+                }
+            )
+            resp.raise_for_status()
+        except Exception as e:
+            print(resp.text)
+            print(e)
+            pass
+
+    # Update db
+    c.execute("DELETE FROM `data` WHERE `key_id` = 'status'")
+    c.execute("INSERT INTO `data` VALUES (?,?)", [
+        "status",
+        r['status']['indicator'],
+    ])
+    conn.commit()
+
+
 # Look for changed incidents
 def incident_check():
     # Fetch known incidents from db
@@ -274,6 +338,9 @@ def incident_check():
 
 # Look for mod commands
 def mod_check():
+    if not post_to_reddit:
+        return
+
     # Get reddit posts
     posts = {}
     for row in c.execute("SELECT * FROM posts"):
@@ -305,6 +372,7 @@ def mod_check():
 
 # Run all
 def run():
+    status_check()
     incident_check()
     mod_check()
 
