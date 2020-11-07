@@ -262,7 +262,7 @@ def status_check():
         last_status = row[0]
 
     # Fetch incidents from API
-    r = requests.get("https://status.discord.com/api/v2/status.json")
+    r = requests.get("https://discordstatus.com/api/v2/status.json")
     r = r.json()
 
     # Don't do anything if same
@@ -322,7 +322,7 @@ def incident_check():
         known_incidents[row[0]] = row[1]
 
     # Fetch incidents from API
-    r = requests.get("https://status.discord.com/api/v2/incidents.json")
+    r = requests.get("https://discordstatus.com/api/v2/incidents.json")
     r = r.json()
     for incident in r["incidents"]:
         # Is a new incident?
