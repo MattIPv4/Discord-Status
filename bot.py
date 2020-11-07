@@ -1,6 +1,7 @@
 import sqlite3
 from collections import namedtuple
 from datetime import datetime
+from time import sleep
 
 from dateutil import parser
 import praw
@@ -11,6 +12,9 @@ from conf import *
 
 # Global
 target_subreddits = ["discordstatus"]
+target_channels = ["774652047026290688"]
+post_to_reddit = False
+post_to_discord = True
 
 # Connect to db
 conn = sqlite3.connect("bot.db")
@@ -20,6 +24,7 @@ c = conn.cursor()
 c.execute("CREATE TABLE IF NOT EXISTS incidents (status_id text, last_update text)")
 c.execute("CREATE TABLE IF NOT EXISTS posts (status_id text, reddit_id text)")
 c.execute("CREATE TABLE IF NOT EXISTS updates (status_id text, update_id text)")
+c.execute("CREATE TABLE IF NOT EXISTS messages (status_id text, discord_id text)")
 
 
 # Connect to reddit
@@ -31,6 +36,33 @@ def reddit():
                        username=REDDIT_USERNAME,
                        password=REDDIT_PASS,
                        user_agent=user_agent)
+
+
+# Post a message on Discord
+def discord_message(content, channel_id):
+    r = requests.post(
+        "https://discord.com/api/channels/{}/messages".format(channel_id),
+        data={
+            "content": content
+        },
+        headers={
+            "Authorization": "Bot {}".format(DISCORD_TOKEN)
+        }
+    )
+    r.raise_for_status()
+    return r.json()
+
+
+# Announce a message on Discord
+def discord_crosspost_message(channel_id, message_id):
+    r = requests.post(
+        "https://discord.com/api/channels/{}/messages/{}/crosspost".format(channel_id, message_id),
+        headers={
+            "Authorization": "Bot {}".format(DISCORD_TOKEN)
+        }
+    )
+    r.raise_for_status()
+    return r.json()
 
 
 # Format an incident update
@@ -93,34 +125,24 @@ def incident_update(incident):
 
     # Only bother if there are edits
     if edits:
-        # Get reddit posts
-        posts = []
-        for row in c.execute("SELECT * FROM posts WHERE status_id = ?", [incident["id"]]):
-            posts.append(row[1])
+        if post_to_reddit:
+            # Get reddit posts
+            posts = []
+            for row in c.execute("SELECT * FROM posts WHERE status_id = ?", [incident["id"]]):
+                posts.append(row[1])
 
-        # Edit posts
-        r = reddit()
-        for post in posts:
-            try:
-                post = r.submission(post)
-                post.edit(post.selftext + edits)
-            except:
-                continue
+            # Edit posts
+            r = reddit()
+            for post in posts:
+                try:
+                    post = r.submission(post)
+                    post.edit(post.selftext + edits)
+                except:
+                    continue
 
 
 # Handle a new incident
 def new_incident(incident):
-    # Generate post
-    with open("templates/new.md", "r") as f:
-        post = f.read()
-    date = date_iso(incident["created_at"])
-    title = "{} - Discord Service Interruption - {}".format(incident["name"], date)
-    summary = ""
-    if incident["incident_updates"]:
-        summary = "\n{}\n".format(update_format(incident["incident_updates"][-1]))
-    post = post.format(title=title, incident=namedtuple("Incident", incident.keys())(*incident.values()),
-                       date=date, incident_summary=summary)
-
     # Update db
     c.execute("INSERT INTO incidents VALUES (?,?)", [
         incident["id"],
@@ -133,21 +155,59 @@ def new_incident(incident):
         ])
     conn.commit()
 
-    # Send post to reddit
-    r = reddit()
-    for subreddit in target_subreddits:
-        try:
-            subr = r.subreddit(subreddit)
-            subm = subr.submit(title, selftext=post)
-        except:
-            continue
-        print("https://reddit.com" + subm.permalink)
-        # Update db
-        c.execute("INSERT INTO posts VALUES (?,?)", [
-            incident["id"],
-            subm.id
-        ])
-    conn.commit()
+    # Reddit
+    if post_to_reddit:
+        # Generate post
+        with open("templates/new.md", "r") as f:
+            post = f.read()
+        date = date_iso(incident["created_at"])
+        title = "{} - Discord Service Interruption - {}".format(incident["name"], date)
+        summary = ""
+        if incident["incident_updates"]:
+            summary = "\n{}\n".format(update_format(incident["incident_updates"][-1]))
+        post = post.format(title=title, incident=namedtuple("Incident", incident.keys())(*incident.values()),
+                           date=date, summary=summary)
+
+        # Send post to reddit
+        r = reddit()
+        for subreddit in target_subreddits:
+            try:
+                subr = r.subreddit(subreddit)
+                subm = subr.submit(title, selftext=post)
+            except:
+                continue
+            print("https://reddit.com" + subm.permalink)
+            # Update db
+            c.execute("INSERT INTO posts VALUES (?,?)", [
+                incident["id"],
+                subm.id
+            ])
+        conn.commit()
+
+    # Discord
+    if post_to_discord:
+        # Generate post
+        with open("templates/new-discord.md", "r") as f:
+            post = f.read()
+        date = date_iso(incident["created_at"])
+        summary = update_format(incident["incident_updates"][-1]) if incident["incident_updates"] else ""
+        post = post.format(incident=namedtuple("Incident", incident.keys())(*incident.values()), date=date,
+                           summary=summary)
+
+        # Send post to Discord
+        for channel in target_channels:
+            try:
+                msg = discord_message(post, channel)
+                discord_crosspost_message(channel, msg["id"])
+            except:
+                continue
+            # Update db
+            c.execute("INSERT INTO messages VALUES (?,?)", [
+                incident["id"],
+                msg["id"]
+            ])
+            sleep(1)
+        conn.commit()
 
     # Handle other updates in incident
     incident_update(incident)
