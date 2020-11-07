@@ -13,7 +13,7 @@ from conf import *
 
 # Global
 target_subreddits = ["discordstatus"]
-target_channels = ["774652047026290688"]
+target_channels = ["774652047026290688", "468846970535018506"]  # Testing, Lounge
 post_to_reddit = True
 post_to_discord = True
 update_reddit_icon = False
