@@ -3,6 +3,7 @@ from collections import namedtuple
 from datetime import datetime
 from time import sleep
 from base64 import b64encode
+from os.path import dirname
 
 from dateutil import parser
 import praw
@@ -20,7 +21,7 @@ update_reddit_icon = False
 update_discord_icon = True
 
 # Connect to db
-conn = sqlite3.connect("bot.db")
+conn = sqlite3.connect(dirname(__file__) + "/bot.db")
 c = conn.cursor()
 
 # Create tables
@@ -71,7 +72,7 @@ def discord_crosspost_message(channel_id, message_id):
 
 # Format an incident update
 def update_format(update):
-    with open("templates/update_body.md", "r") as f:
+    with open(dirname(__file__) + "/templates/update_body.md", "r") as f:
         content = f.read()
     content = content.format(status=update["status"].title(), message=update["body"].replace("\n", "\n> "))
     return content
@@ -100,7 +101,7 @@ def incident_update(incident):
         posted_updates.append(row[1])
 
     # Fetch template
-    with open("templates/update.md", "r") as f:
+    with open(dirname(__file__) + "/templates/update.md", "r") as f:
         content = f.read()
 
     # Loop over updates in incident
@@ -162,7 +163,7 @@ def new_incident(incident):
     # Reddit
     if post_to_reddit:
         # Generate post
-        with open("templates/new.md", "r") as f:
+        with open(dirname(__file__) + "/templates/new.md", "r") as f:
             post = f.read()
         date = date_iso(incident["created_at"])
         title = "{} - Discord Service Interruption - {}".format(incident["name"], date)
@@ -191,7 +192,7 @@ def new_incident(incident):
     # Discord
     if post_to_discord:
         # Generate post
-        with open("templates/new-discord.md", "r") as f:
+        with open(dirname(__file__) + "/templates/new-discord.md", "r") as f:
             post = f.read()
         date = date_iso(incident["created_at"])
         summary = update_format(incident["incident_updates"][-1]) if incident["incident_updates"] else ""
@@ -220,7 +221,7 @@ def new_incident(incident):
 # Handle a moderator update
 def mod_update(reply, incident_id):
     # Generate edit
-    with open("templates/mod.md", "r") as f:
+    with open(dirname(__file__) + "/templates/mod.md", "r") as f:
         content = f.read()
     date = date_unix(reply.created_utc)
     content = "\n\n" + content.format(submission=reply, date=date,
@@ -275,11 +276,11 @@ def status_check():
         for subreddit in target_subreddits:
             try:
                 subr = rd.subreddit(subreddit)
-                subr.stylesheet.upload_mobile_icon("icons/" + r['status']['indicator'] + ".png")
+                subr.stylesheet.upload_mobile_icon(dirname(__file__) + "/icons/" + r['status']['indicator'] + ".png")
                 rd.post(
                     path="/r/" + subreddit + "/api/upload_sr_img",
                     data={"upload_type": "icon"},
-                    files={"file": open("icons/" + r['status']['indicator'] + ".png", "rb")}
+                    files={"file": open(dirname(__file__) + "/icons/" + r['status']['indicator'] + ".png", "rb")}
                 )
             except Exception as e:
                 print(e)
@@ -288,7 +289,7 @@ def status_check():
     # Update the Discord icon
     if update_discord_icon:
         try:
-            with open("icons/" + r['status']['indicator'] + ".png", "rb") as file:
+            with open(dirname(__file__) + "/icons/" + r['status']['indicator'] + ".png", "rb") as file:
                 b64 = b64encode(file.read())
             resp = requests.patch(
                 "https://discord.com/api/users/@me",
